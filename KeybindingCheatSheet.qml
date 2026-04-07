@@ -14,10 +14,8 @@ DesktopPluginComponent {
     minHeight: 120
 
     // ── Settings ───────────────────────────────────────────────────────────────
-    readonly property string compositor:      pluginData.compositor      || "hyprland"
-    readonly property string configPath:      pluginData.configPath      || ""
-    readonly property string additionalFiles: pluginData.additionalFiles || ""
-    readonly property int    numColumns:      Math.max(1, Math.min(5, parseInt(pluginData.columns) || 1))
+    readonly property string compositor: pluginData.compositor || "hyprland"
+    readonly property int    numColumns: Math.max(1, Math.min(5, parseInt(pluginData.columns) || 1))
     readonly property real   bgOpacity:       Math.max(0, Math.min(1, (pluginData.backgroundOpacity ?? 70) / 100))
     readonly property real   fontScale:       Math.max(0.5, Math.min(2.0, (pluginData.fontScale ?? 100) / 100))
     readonly property color  accentColor: {
@@ -37,10 +35,6 @@ DesktopPluginComponent {
     property var    sections:   []
     property bool   loading:    true
     property string parseError: ""
-    property string stdoutBuf:  ""
-
-    readonly property string scriptPath:
-        Qt.resolvedUrl("parse-keybindings.sh").toString().replace(/^file:\/\//, "")
 
     readonly property var sectionOrder: {
         try { return JSON.parse(pluginData.sectionOrder || "[]") } catch(e) { return [] }
@@ -93,56 +87,56 @@ DesktopPluginComponent {
     readonly property bool hasContent:
         columnData.some(col => col && col.length > 0)
 
-    Component.onCompleted:    reload()
-    onCompositorChanged:      reload()
-    onConfigPathChanged:      reload()
-    onAdditionalFilesChanged: reload()
+    Component.onCompleted: reload()
+    onCompositorChanged:   reload()
 
     function reload() {
-        stdoutBuf  = ""
         parseError = ""
         loading    = true
-        parserProcess.running = false
-        Qt.callLater(function() {
-            try {
-                parserProcess.running = true
-            } catch(e) {
-                loading    = false
-                parseError = "Could not start parser"
-            }
-        })
+        if (parserProcess.running)
+            parserProcess.running = false
+        Qt.callLater(function() { parserProcess.running = true })
     }
 
     // ── Parser process ─────────────────────────────────────────────────────────
     Process {
         id: parserProcess
-        command: [root.scriptPath, root.compositor, root.configPath, root.additionalFiles]
+        command: ["dms", "keybinds", "show", root.compositor]
 
-        stdout: SplitParser {
-            onRead: data => root.stdoutBuf += data + "\n"
-        }
-
-        onExited: (code, signal) => {
-            Qt.callLater(function() {
-                root.loading = false
-                if (root.stdoutBuf.trim() === "") {
-                    root.parseError = "No output from parser (exit code " + code + ")"
-                    return
-                }
+        stdout: StdioCollector {
+            onStreamFinished: {
                 try {
-                    var parsed = JSON.parse(root.stdoutBuf.trim())
+                    var parsed = JSON.parse(text)
                     if (parsed.error) {
                         root.parseError = parsed.error
                         root.sections   = []
                     } else {
-                        root.sections   = parsed.sections || []
+                        var binds = parsed.binds || {}
+                        var secs  = []
+                        for (var catName in binds) {
+                            var id = catName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")
+                            secs.push({
+                                id: id,
+                                name: catName,
+                                bindings: binds[catName].map(function(b) { return { key: b.key, description: b.desc } })
+                            })
+                        }
+                        root.sections   = secs
                         root.parseError = ""
                     }
                 } catch(e) {
                     root.parseError = "JSON parse failed: " + e
                     root.sections   = []
                 }
-            })
+                root.loading = false
+            }
+        }
+
+        onExited: exitCode => {
+            if (exitCode !== 0 && root.loading) {
+                root.parseError = "dms exited with code " + exitCode
+                root.loading    = false
+            }
         }
     }
 
@@ -227,7 +221,7 @@ DesktopPluginComponent {
                 width: parent.width - Theme.spacingL
                 text: root.loading      ? "Parsing…"
                     : root.parseError   ? "Could not parse config.\nCheck compositor and path in settings."
-                                        : "No sections found.\nAdd # @section markers to your config."
+                                        : "No keybinds found for " + root.compositor + "."
                 color: (!root.loading && root.parseError) ? Theme.error : Theme.surfaceVariantText
                 font.pixelSize: Theme.fontSizeSmall * root.fontScale
                 wrapMode: Text.Wrap

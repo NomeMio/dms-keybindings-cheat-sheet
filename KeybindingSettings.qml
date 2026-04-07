@@ -10,23 +10,13 @@ PluginSettings {
     id: root
     pluginId: "keybindingCheatSheet"
 
-    readonly property string scriptPath:
-        Qt.resolvedUrl("parse-keybindings.sh").toString().replace(/^file:\/\//, "")
-
-    // ── Live-parsed sections (runs the parser whenever compositor/path changes) ──
+    // ── Live-parsed sections ───────────────────────────────────────────────────
     property var parsedSections: []
-    property string _stdoutBuf: ""
 
     function reloadSections() {
         if (!pluginService) return
-        _stdoutBuf = ""
-        settingsParser.running = false
-        settingsParser.command = [
-            root.scriptPath,
-            root.loadValue("compositor", "hyprland"),
-            root.loadValue("configPath", ""),
-            root.loadValue("additionalFiles", "")
-        ]
+        if (settingsParser.running) settingsParser.running = false
+        settingsParser.command = ["dms", "keybinds", "show", root.loadValue("compositor", "hyprland")]
         Qt.callLater(function() { settingsParser.running = true })
     }
 
@@ -34,17 +24,26 @@ PluginSettings {
 
     Process {
         id: settingsParser
-        stdout: SplitParser {
-            onRead: data => root._stdoutBuf += data + "\n"
-        }
-        onExited: Qt.callLater(function() {
-            try {
-                var parsed = JSON.parse(root._stdoutBuf.trim())
-                root.parsedSections = parsed.sections || []
-            } catch(e) {
-                root.parsedSections = []
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    var parsed = JSON.parse(text)
+                    var binds  = parsed.binds || {}
+                    var secs   = []
+                    for (var catName in binds) {
+                        var id = catName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")
+                        secs.push({
+                            id: id,
+                            name: catName,
+                            bindings: binds[catName].map(function(b) { return { key: b.key, description: b.desc } })
+                        })
+                    }
+                    root.parsedSections = secs
+                } catch(e) {
+                    root.parsedSections = []
+                }
             }
-        })
+        }
     }
 
     function hiddenSections() {
@@ -71,23 +70,11 @@ PluginSettings {
         options: [
             { label: "Hyprland", value: "hyprland" },
             { label: "MangoWC",  value: "mangowc"  },
+            { label: "Scroll",   value: "scroll"   },
+            { label: "Miracle",  value: "miracle"  },
             { label: "Sway",     value: "sway"     },
             { label: "Niri",     value: "niri"     }
         ]
-    }
-
-    StringSetting {
-        settingKey: "configPath"
-        label: "Config Path"
-        description: "Leave empty to use the default path for the selected compositor"
-        placeholder: "~/.config/hypr/dms/binds.conf"
-    }
-
-    StringSetting {
-        settingKey: "additionalFiles"
-        label: "Additional Files"
-        description: "Comma-separated extra files to parse (e.g. separate binds sub-configs)"
-        placeholder: "~/.config/hypr/binds.conf"
     }
 
     // ── Appearance ─────────────────────────────────────────────────────────────
