@@ -35,13 +35,25 @@ DesktopPluginComponent {
     property var    sections:   []
     property bool   loading:    true
     property string parseError: ""
+    property var    collapsedSections: []
 
     readonly property var sectionOrder: {
         try { return JSON.parse(pluginData.sectionOrder || "[]") } catch(e) { return [] }
     }
 
-    // Build a flat item list and split across N columns.
-    // Each item: { type: "header"|"binding", name?, key?, description? }
+    function isSectionCollapsed(sectionId) {
+        return (root.collapsedSections || []).indexOf(sectionId) !== -1
+    }
+
+    function toggleSection(sectionId) {
+        var collapsed = (root.collapsedSections || []).slice()
+        var idx = collapsed.indexOf(sectionId)
+        if (idx === -1) collapsed.push(sectionId)
+        else collapsed.splice(idx, 1)
+        root.collapsedSections = collapsed
+    }
+
+    // Build section lists and split them across N columns.
     readonly property var columnData: {
         try {
             var secs   = root.sections       || []
@@ -61,18 +73,18 @@ DesktopPluginComponent {
                 if (order.indexOf(secs[s2].id) === -1) ordered.push(secs[s2])
             }
 
-            // Flatten all visible sections into a single item list
+            // Keep sections intact so headers and bindings stay together.
             var flat = []
             for (var i = 0; i < ordered.length; i++) {
                 if (hidden.indexOf(ordered[i].id) !== -1) continue
-                flat.push({ type: "header", name: ordered[i].name })
-                var binds = ordered[i].bindings || []
-                for (var b = 0; b < binds.length; b++) {
-                    flat.push({ type: "binding", key: binds[b].key, description: binds[b].description })
-                }
+                flat.push({
+                    id: ordered[i].id,
+                    name: ordered[i].name,
+                    bindings: ordered[i].bindings || []
+                })
             }
 
-            // Split flat list evenly across columns
+            // Split sections evenly across columns.
             var perCol = Math.ceil(flat.length / n)
             var cols   = []
             for (var c = 0; c < n; c++) {
@@ -255,7 +267,7 @@ DesktopPluginComponent {
 
                         delegate: Column {
                             id: colDelegate
-                            required property var modelData   // flat item array for this column
+                            required property var modelData   // section array for this column
                             required property int index
 
                             width: {
@@ -270,98 +282,104 @@ DesktopPluginComponent {
                             Repeater {
                                 model: colDelegate.modelData || []
 
-                                delegate: Loader {
-                                    id: itemLoader
+                                delegate: Column {
                                     required property var modelData
                                     required property int index
                                     width: colDelegate.width
+                                    spacing: 3
 
-                                    sourceComponent: modelData.type === "header" ? headerComp : bindingComp
+                                    Rectangle {
+                                        width: parent.width
+                                        height: 28
+                                        radius: Theme.cornerRadius / 2
+                                        color: headerHover.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.12) : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.08)
 
-                                    property var itemData: modelData
-                                    property real colWidth: colDelegate.width
-                                    property color accent: root.accentColor
-                                    property bool isFirstInCol: index === 0
+                                        HoverHandler { id: headerHover }
+                                        TapHandler { onTapped: root.toggleSection(modelData.id) }
+
+                                        RowLayout {
+                                            anchors.fill: parent
+                                            anchors.leftMargin: Theme.spacingS
+                                            anchors.rightMargin: Theme.spacingS
+                                            spacing: Theme.spacingS
+
+                                            DankIcon {
+                                                name: root.isSectionCollapsed(modelData.id) ? "keyboard_arrow_right" : "keyboard_arrow_down"
+                                                size: 16
+                                                color: root.accentColor
+                                            }
+
+                                            StyledText {
+                                                Layout.fillWidth: true
+                                                text: (modelData.name || "").toUpperCase()
+                                                color: root.accentColor
+                                                font.pixelSize: (Theme.fontSizeSmall - 1) * root.fontScale
+                                                font.bold: true
+                                                font.letterSpacing: 0.8
+                                            }
+
+                                            StyledText {
+                                                text: modelData.bindings.length + " bindings"
+                                                color: Theme.surfaceVariantText
+                                                font.pixelSize: (Theme.fontSizeSmall - 2) * root.fontScale
+                                            }
+                                        }
+                                    }
+
+                                    Column {
+                                        visible: !root.isSectionCollapsed(modelData.id)
+                                        width: parent.width
+                                        spacing: 3
+
+                                        Repeater {
+                                            model: modelData.bindings || []
+
+                                            delegate: Item {
+                                                required property var modelData
+                                                width: parent.width
+                                                height: 24
+
+                                                readonly property real keyW: Math.floor(width * 0.38)
+
+                                                Rectangle {
+                                                    id: keyRect
+                                                    anchors.verticalCenter: parent.verticalCenter
+                                                    anchors.left: parent.left
+                                                    width: parent.keyW
+                                                    height: 20
+                                                    color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.10)
+                                                    radius: 3
+
+                                                    StyledText {
+                                                        anchors.centerIn: parent
+                                                        width: parent.width - 6
+                                                        text: modelData.key || ""
+                                                        color: root.accentColor
+                                                        font.pixelSize: (Theme.fontSizeSmall - 2) * root.fontScale
+                                                        font.family: "monospace"
+                                                        elide: Text.ElideRight
+                                                        horizontalAlignment: Text.AlignHCenter
+                                                    }
+                                                }
+
+                                                StyledText {
+                                                    anchors.verticalCenter: parent.verticalCenter
+                                                    anchors.left: keyRect.right
+                                                    anchors.leftMargin: Theme.spacingS
+                                                    anchors.right: parent.right
+                                                    text: modelData.description || ""
+                                                    color: Theme.surfaceVariantText
+                                                    font.pixelSize: (Theme.fontSizeSmall - 1) * root.fontScale
+                                                    elide: Text.ElideRight
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
                 }
-            }
-        }
-    }
-
-    // ── Section header component ────────────────────────────────────────────────
-    Component {
-        id: headerComp
-
-        Item {
-            width: colWidth
-            height: 24 + (isFirstInCol ? 0 : Theme.spacingS)
-
-            Rectangle {
-                anchors.bottom: parent.bottom
-                width: parent.width
-                height: 24
-                color: Qt.rgba(accent.r, accent.g, accent.b, 0.15)
-                radius: Theme.cornerRadius / 2
-
-                StyledText {
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.left: parent.left
-                    anchors.leftMargin: Theme.spacingS
-                    text: (itemData.name || "").toUpperCase()
-                    color: accent
-                    font.pixelSize: (Theme.fontSizeSmall - 1) * root.fontScale
-                    font.bold: true
-                    font.letterSpacing: 0.8
-                }
-            }
-        }
-    }
-
-    // ── Binding row component ───────────────────────────────────────────────────
-    Component {
-        id: bindingComp
-
-        Item {
-            width: colWidth
-            height: 24
-
-            readonly property real keyW: Math.floor(colWidth * 0.38)
-
-            // Key badge
-            Rectangle {
-                id: keyRect
-                anchors.verticalCenter: parent.verticalCenter
-                anchors.left: parent.left
-                width: parent.keyW
-                height: 20
-                color: Qt.rgba(accent.r, accent.g, accent.b, 0.10)
-                radius: 3
-
-                StyledText {
-                    anchors.centerIn: parent
-                    width: parent.width - 6
-                    text: itemData.key || ""
-                    color: accent
-                    font.pixelSize: (Theme.fontSizeSmall - 2) * root.fontScale
-                    font.family: "monospace"
-                    elide: Text.ElideRight
-                    horizontalAlignment: Text.AlignHCenter
-                }
-            }
-
-            // Description
-            StyledText {
-                anchors.verticalCenter: parent.verticalCenter
-                anchors.left: keyRect.right
-                anchors.leftMargin: Theme.spacingS
-                anchors.right: parent.right
-                text: itemData.description || ""
-                color: Theme.surfaceVariantText
-                font.pixelSize: (Theme.fontSizeSmall - 1) * root.fontScale
-                elide: Text.ElideRight
             }
         }
     }

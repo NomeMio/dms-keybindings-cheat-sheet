@@ -1,8 +1,8 @@
 # Keybinding Cheat Sheet
 
-A [DankMaterialShell](https://danklinux.com/docs/dankmaterialshell) desktop widget that parses your compositor's keybinding config and displays them as a live, filterable cheat sheet.
+A [DankMaterialShell](https://danklinux.com/docs/dankmaterialshell) desktop widget that shows compositor keybindings by calling `dms keybinds show <compositor>`.
 
-Supports **Hyprland**, **MangoWC**, **Sway**, and **Niri**.
+Supports **Hyprland**, **MangoWC**, **Scroll**, **Miracle**, **Sway**, and **Niri**.
 
 ![Keybinding Cheat Sheet widget](example.png)
 
@@ -10,12 +10,11 @@ Supports **Hyprland**, **MangoWC**, **Sway**, and **Niri**.
 
 ## Features
 
-- Parses keybindings directly from your compositor config — nothing is hardcoded
-- Sections defined by annotations in your config; everything else is ignored
+- Reads keybindings from `dms keybinds show <compositor>`
+- Uses section/category names provided by DMS
 - Show/hide individual sections from the settings panel
-- Follows `source`/`include` directives to pick up bindings from sub-configs
-- Supports additional config files via settings (e.g. separate binds files)
-- `@ignore` blocks let you exclude bindings you don't want shown
+- Reorder sections in settings
+- Configure columns, accent color, font scale, and background opacity
 
 ---
 
@@ -32,64 +31,6 @@ Supports **Hyprland**, **MangoWC**, **Sway**, and **Niri**.
 
 3. Add the widget to your desktop.
 
----
-
-## Annotating Your Config
-
-The parser only picks up bindings inside explicitly marked sections. Add `# @section` comments to your config to define them:
-
-### Hyprland / MangoWC / Sway
-
-```bash
-# @section Applications
-bind = $mainMod, Return, exec, alacritty
-bind = $mainMod, B, exec, firefox
-
-# @section Window Management
-bind = $mainMod, Q, killactive,
-bind = $mainMod, F, fullscreen, 0
-```
-
-### Niri
-
-```kdl
-binds {
-    // @section Applications
-    Mod+Return { spawn "alacritty"; }
-    Mod+B { spawn "firefox"; }
-
-    // @section Window Management
-    Mod+Q { close-window; }
-}
-```
-
-Plain comments are ignored — only `# @section` (or `// @section` for Niri) triggers a new section. For Niri, all annotations must be inside the `binds { }` block.
-
-### Ignoring bindings
-
-Wrap any bindings you don't want shown in the widget with `@ignore` / `@end-ignore`:
-
-**Hyprland / MangoWC / Sway**
-```bash
-# @section Applications
-bind = $mainMod, Return, exec, alacritty
-
-# @ignore
-bind = $mainMod, X, exec, internal-debug-tool
-# @end-ignore
-```
-
-**Niri**
-```kdl
-binds {
-    // @section Applications
-    Mod+Return { spawn "alacritty"; }
-
-    // @ignore
-    Mod+X { spawn "internal-debug-tool"; }
-    // @end-ignore
-}
-```
 
 ---
 
@@ -97,49 +38,47 @@ binds {
 
 | Setting | Description |
 |---|---|
-| **Compositor** | Which compositor config format to parse |
-| **Config path** | Path to your main config file. Leave empty to use the default location |
-| **Additional files** | Comma-separated extra files to parse (e.g. a dedicated binds sub-config) |
+| **Compositor** | Which compositor source to request from DMS |
+| **Columns** | Number of columns used to display bindings |
+| **Color** | Accent color mode: primary, secondary, or custom |
+| **Background Opacity** | Transparency of the widget background |
+| **Font Scale** | Scale factor for all text in the widget |
 | **Sections** | Toggle individual sections on/off in the widget |
+| **Section Order** | Move sections up/down in settings |
 
-### Default config paths
+### Compositor options
 
-| Compositor | Default path |
-|---|---|
-| Hyprland | `~/.config/hypr/dms/binds.conf` |
-| MangoWC | `~/.config/mango/config.conf` |
-| Sway | `~/.config/sway/config` |
-| Niri | `~/.config/niri/config.kdl` |
+| Compositor |
+|---|
+| Hyprland |
+| MangoWC |
+| Scroll |
+| Miracle |
+| Sway |
+| Niri |
 
 ---
 
 ## How It Works
 
-The widget calls `parse-keybindings.sh` via a Quickshell `Process` at startup and whenever settings change. The script:
-
-1. Reads the config file(s)
-2. Resolves variables (`$mainMod`, `$mod`, etc.)
-3. Follows `source`/`include` directives recursively
-4. Collects bindings under `# @section` markers
-5. Outputs a JSON object: `{ "sections": [ { "id", "name", "bindings": [...] } ] }`
-
-The QML widget parses that JSON and renders it. Hidden sections are stored in plugin settings and filtered client-side.
-
-### Running the parser directly
+The widget runs a Quickshell `Process` command:
 
 ```bash
-./parse-keybindings.sh hyprland
-./parse-keybindings.sh sway ~/.config/sway/config
-./parse-keybindings.sh hyprland "" "~/.config/hypr/extra.conf,~/.config/hypr/media.conf"
+dms keybinds show <compositor>
 ```
+
+It expects JSON output with categories/sections and keybind entries, then renders them into the cheat sheet UI.
+
+Section visibility and section order are stored in plugin settings and applied client-side.
 
 ---
 
-## Tests
+## Manual check
+
+Run the DMS command directly to verify available data for a compositor:
 
 ```bash
-bash tests/test_parsers.sh
-bash tests/test_parsers.sh --verbose
+dms keybinds show hyprland
 ```
 
 ---
