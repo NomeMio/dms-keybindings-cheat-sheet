@@ -18,6 +18,8 @@ DesktopPluginComponent {
     readonly property int    numColumns: Math.max(1, Math.min(5, parseInt(pluginData.columns) || 1))
     readonly property real   bgOpacity:       Math.max(0, Math.min(1, (pluginData.backgroundOpacity ?? 70) / 100))
     readonly property real   fontScale:       Math.max(0.5, Math.min(2.0, (pluginData.fontScale ?? 100) / 100))
+    readonly property string editorCommand: (pluginData.editorCommand || "code").trim() !== "" ? pluginData.editorCommand.trim() : "code"
+    readonly property string customBindingFilePath: (pluginData.bindingFilePath || "").trim()
     readonly property color  accentColor: {
         var mode = pluginData.accentColorMode || "primary"
         if (mode === "secondary") return Theme.secondary
@@ -40,6 +42,19 @@ DesktopPluginComponent {
     readonly property var sectionOrder: {
         try { return JSON.parse(pluginData.sectionOrder || "[]") } catch(e) { return [] }
     }
+
+    function defaultBindingPath(compositor) {
+        if (compositor === "hyprland") return "~/.config/hypr/dms/binds.conf"
+        if (compositor === "mangowc") return "~/.config/mango/config.conf"
+        if (compositor === "scroll") return "~/.config/scroll/config.conf"
+        if (compositor === "miracle") return "~/.config/miracle/config.conf"
+        if (compositor === "sway") return "~/.config/sway/config"
+        if (compositor === "niri") return "~/.config/niri/config.kdl"
+        return ""
+    }
+
+    readonly property string bindingFilePath:
+        customBindingFilePath !== "" ? customBindingFilePath : defaultBindingPath(root.compositor)
 
     function isSectionCollapsed(sectionId) {
         return (root.collapsedSections || []).indexOf(sectionId) !== -1
@@ -70,6 +85,29 @@ DesktopPluginComponent {
 
     function expandAllSections() {
         root.collapsedSections = []
+    }
+
+    function shellQuote(value) {
+        return "'" + String(value || "").replace(/'/g, "'\"'\"'") + "'"
+    }
+
+    function shellPathArg(path) {
+        var p = String(path || "")
+        if (p.indexOf("~/") === 0)
+            return '"${HOME}/' + p.slice(2).replace(/(["\\$`])/g, "\\$1") + '"'
+        return shellQuote(p)
+    }
+
+    function openBindingFile() {
+        if (root.bindingFilePath === "") return
+        openEditorProcess.command = [
+            "sh",
+            "-lc",
+            root.editorCommand + " " + shellPathArg(root.bindingFilePath)
+        ]
+        if (openEditorProcess.running)
+            openEditorProcess.running = false
+        Qt.callLater(function() { openEditorProcess.running = true })
     }
 
     // Build section lists and split them across N columns.
@@ -171,6 +209,10 @@ DesktopPluginComponent {
         }
     }
 
+    Process {
+        id: openEditorProcess
+    }
+
     // ── Background ─────────────────────────────────────────────────────────────
     Rectangle {
         anchors.fill: parent
@@ -238,6 +280,23 @@ DesktopPluginComponent {
 
                 HoverHandler { id: expandAllHover }
                 TapHandler { onTapped: root.expandAllSections() }
+            }
+
+            Rectangle {
+                visible: root.bindingFilePath !== ""
+                width: 22; height: 22
+                radius: Theme.cornerRadius / 2
+                color: openFileHover.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.18) : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.10)
+
+                DankIcon {
+                    anchors.centerIn: parent
+                    name: "edit"
+                    size: 14
+                    color: root.accentColor
+                }
+
+                HoverHandler { id: openFileHover }
+                TapHandler { onTapped: root.openBindingFile() }
             }
 
             Item { Layout.fillWidth: true }

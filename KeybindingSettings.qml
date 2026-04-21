@@ -61,6 +61,16 @@ PluginSettings {
         pluginService.savePluginData(pluginId, "hiddenSections", JSON.stringify(hidden))
     }
 
+    function defaultBindingPath(compositor) {
+        if (compositor === "hyprland") return "~/.config/hypr/dms/binds.conf"
+        if (compositor === "mangowc") return "~/.config/mango/config.conf"
+        if (compositor === "scroll") return "~/.config/scroll/config.conf"
+        if (compositor === "miracle") return "~/.config/miracle/config.conf"
+        if (compositor === "sway") return "~/.config/sway/config"
+        if (compositor === "niri") return "~/.config/niri/config.kdl"
+        return ""
+    }
+
     // ── Compositor ─────────────────────────────────────────────────────────────
     SelectionSetting {
         settingKey: "compositor"
@@ -91,6 +101,79 @@ PluginSettings {
             { label: "4", value: "4" },
             { label: "5", value: "5" }
         ]
+    }
+
+    // ── Editing ───────────────────────────────────────────────────────────────
+    Column {
+        width: parent.width
+        spacing: Theme.spacingXS
+
+        StyledText {
+            text: "Editing"
+            font.pixelSize: Theme.fontSizeMedium
+            font.weight: Font.Medium
+            color: Theme.surfaceText
+        }
+
+        StyledText {
+            text: "Editor command"
+            font.pixelSize: Theme.fontSizeSmall
+            color: Theme.surfaceVariantText
+        }
+
+        TextField {
+            width: parent.width
+            placeholderText: "code"
+            text: root.loadValue("editorCommand", "code")
+            onEditingFinished: root.saveValue("editorCommand", text.trim() === "" ? "code" : text.trim())
+        }
+
+        StyledText {
+            text: "Binding file path"
+            font.pixelSize: Theme.fontSizeSmall
+            color: Theme.surfaceVariantText
+        }
+
+        TextField {
+            id: bindingPathField
+            width: parent.width
+            placeholderText: defaultBindingPath(root.loadValue("compositor", "hyprland"))
+            text: root.loadValue("bindingFilePath", "")
+            onEditingFinished: root.saveValue("bindingFilePath", text.trim())
+        }
+
+        Row {
+            spacing: Theme.spacingS
+
+            Rectangle {
+                width: 86
+                height: 24
+                radius: Theme.cornerRadius / 2
+                color: resetPathHover.containsMouse ? Theme.surfaceHover : Theme.surfaceContainerHigh
+
+                StyledText {
+                    anchors.centerIn: parent
+                    text: "Use Default"
+                    font.pixelSize: Theme.fontSizeSmall
+                    color: Theme.surfaceText
+                }
+
+                HoverHandler { id: resetPathHover }
+                TapHandler {
+                    onTapped: {
+                        root.saveValue("bindingFilePath", "")
+                        bindingPathField.text = ""
+                    }
+                }
+            }
+
+            StyledText {
+                anchors.verticalCenter: parent.verticalCenter
+                text: "Default: " + defaultBindingPath(root.loadValue("compositor", "hyprland"))
+                font.pixelSize: Theme.fontSizeSmall
+                color: Theme.surfaceVariantText
+            }
+        }
     }
 
     // ── Color mode picker (Primary / Secondary / Custom) ───────────────────────
