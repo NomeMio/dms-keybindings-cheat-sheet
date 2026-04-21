@@ -53,6 +53,25 @@ DesktopPluginComponent {
         root.collapsedSections = collapsed
     }
 
+    function visibleSectionIds() {
+        var ids = []
+        var hidden = root.hiddenSections || []
+        var secs = root.sections || []
+        for (var i = 0; i < secs.length; i++) {
+            if (hidden.indexOf(secs[i].id) === -1)
+                ids.push(secs[i].id)
+        }
+        return ids
+    }
+
+    function collapseAllSections() {
+        root.collapsedSections = visibleSectionIds()
+    }
+
+    function expandAllSections() {
+        root.collapsedSections = []
+    }
+
     // Build section lists and split them across N columns.
     readonly property var columnData: {
         try {
@@ -181,6 +200,44 @@ DesktopPluginComponent {
                 font.pixelSize: Theme.fontSizeMedium * root.fontScale
                 font.bold: true
                 color: Theme.surfaceText
+            }
+
+            Rectangle {
+                visible: root.hasContent
+                height: 22
+                width: 72
+                radius: Theme.cornerRadius / 2
+                color: collapseAllHover.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.18) : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.10)
+
+                StyledText {
+                    anchors.centerIn: parent
+                    text: "Collapse"
+                    color: root.accentColor
+                    font.pixelSize: (Theme.fontSizeSmall - 2) * root.fontScale
+                    font.bold: true
+                }
+
+                HoverHandler { id: collapseAllHover }
+                TapHandler { onTapped: root.collapseAllSections() }
+            }
+
+            Rectangle {
+                visible: root.hasContent
+                height: 22
+                width: 64
+                radius: Theme.cornerRadius / 2
+                color: expandAllHover.containsMouse ? Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.18) : Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.10)
+
+                StyledText {
+                    anchors.centerIn: parent
+                    text: "Expand"
+                    color: root.accentColor
+                    font.pixelSize: (Theme.fontSizeSmall - 2) * root.fontScale
+                    font.bold: true
+                }
+
+                HoverHandler { id: expandAllHover }
+                TapHandler { onTapped: root.expandAllSections() }
             }
 
             Item { Layout.fillWidth: true }
